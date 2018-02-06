@@ -1,5 +1,5 @@
-# Domoticz-OpenAQ-Plugin
-Gets the air quality at your location from https://openaq.org. 
+# OpenAQ
+This Domoticz plugin gets the air quality at your location from https://openaq.org. 
 OpenAQ is collecting data in 64 different countries and always seeking to add more. They aggregate PM2.5, PM10, ozone (O3), sulfur dioxide (SO2), nitrogen dioxide (NO2), carbon monoxide (CO), and black carbon (BC) from real-time government and research grade sources.
 
 ## Parameters
