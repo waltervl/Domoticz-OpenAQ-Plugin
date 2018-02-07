@@ -8,7 +8,7 @@
 """
 <plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="1.0.0" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
     <params>
-        <param field="Mode1" label="Radius (m)" width="75px" default="10000" required="true"/>
+        <param field="Mode1" label="Radius (km)" width="75px" default="10" required="true"/>
         <param field="Mode6" label="Debug" width="75px">
             <options>
                 <option label="True" value="Debug"/>
@@ -64,6 +64,7 @@ class BasePlugin:
         self.__radius = int( Parameters["Mode1"] )
         if self.__radius < 0:
             self.__radius = 0
+        self.__radius *= 1000  # Convert km to m
         loc = Settings["Location"].split(";")
         lat = loc[0]
         lon = loc[1]
