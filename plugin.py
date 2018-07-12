@@ -152,7 +152,7 @@ class BasePlugin:
                     UpdateDevice(self.__VALUES[id][2], int( self.__VALUES[id][1] ), str( round( self.__VALUES[id][1], 1 ) ) )
             txt = "Number of stations: " + str( totLocations ) + "<br/> " + "Measurements: " + str( totMeasurements )
             # UpdateDeviceName(self.__UNIT_TEXT, plaats)
-            UpdateDevice( len( self.__VALUES ) + 1, 0, txt, TimedOut=1 )
+            UpdateDevice( len( self.__VALUES ) + 1, 0, txt, AlwaysUpdate=True )
         else:
             Domoticz.Debug( "onHeartbeat called, run again in " + str( self.__runAgain ) + " heartbeats." )
 
