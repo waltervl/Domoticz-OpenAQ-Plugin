@@ -6,7 +6,7 @@
 # Author: Xorfor
 #
 """
-<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="1.0.0" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
+<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="1.0.1" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
     <params>
         <param field="Mode1" label="Radius (km)" width="75px" default="10" required="true"/>
         <param field="Mode6" label="Debug" width="75px">
