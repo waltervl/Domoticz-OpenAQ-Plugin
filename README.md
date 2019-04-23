@@ -22,3 +22,5 @@ This plugin uses the latitude and longitude as specified in Domoticz Settings - 
 | **PM2.5**  | Particulate matter less than 2.5 micrometers in diameter |
 | **SO2**    | Sulfur Dioxide                                           |
 | **Info**   | Information, like nearest location, number of locations  |
+
+![OpenAQ](https://github.com/Xorfor/Domoticz-OpenAQ-Plugin/blob/master/images/Knipsel.PNG)
