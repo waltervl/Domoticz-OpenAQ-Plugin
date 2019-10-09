@@ -5,8 +5,11 @@
 #
 # Author: Xorfor
 #
+# Air Quality Index based on:
+#   http://www.airqualitynow.eu/about_indices_definition.php
+
 """
-<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="1.0.1" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
+<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="2.0.0" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
     <params>
         <param field="Mode1" label="Radius (km)" width="75px" default="10" required="true"/>
         <param field="Mode6" label="Debug" width="75px">
@@ -27,27 +30,28 @@ import time
 class BasePlugin:
 
     __HEARTBEATS2MIN = 6
-    __MINUTES = 60       # 1 hour or use a parameter
+    __MINUTES = 60  # 1 hour or use a parameter
 
-    __API_ADDRESS = "api.openaq.org"
+    __API_CONN = "openaq"
+    __API_ENDPOINT = "api.openaq.org"
     __API_URL = "/v1/latest?coordinates={},{}&radius={}&order_by=distance"
 
     __VALUES = {
-        # id     date, value, unit, name,   units
-        "bc":   [None,  None,    1, "BC",    None],
-        "co":   [None,  None,    2, "CO",    None],
-        "no2":  [None,  None,    3, "NO2",   None],
-        "o3":   [None,  None,    4, "O3",    None],
-        "pm10": [None,  None,    5, "PM10",  None],
-        "pm25": [None,  None,    6, "PM2.5", None],
-        "so2":  [None,  None,    7, "SO2",   None],
+        # id: [date, value, unit, name, units, low, medium, high, very high]
+        "bc": [None, None, 1, "BC", None, None, None, None, None],
+        "co": [None, None, 2, "CO", None, 5000, 7500, 10000, 20000],
+        "no2": [None, None, 3, "NO<sub>2</sub>", None, 50, 100, 200, 400],
+        "o3": [None, None, 4, "O<sub>3</sub>", None, 60, 120, 180, 240],
+        "pm10": [None, None, 5, "PM<sub>10</sub>", None, 25, 50, 90, 180],
+        "pm25": [None, None, 6, "PM<sub>2.5</sub>", None, 15, 30, 55, 110],
+        "so2": [None, None, 7, "SO<sub>2</sub>", None, 50, 100, 350, 500],
     }
 
     def __init__(self):
         self.__runAgain = 0
         self.__radius = 0
         self.__url = ""
-        # self.__conn = None
+        self.__conn = None
 
     def onStart(self):
         Domoticz.Debug("onStart called")
@@ -60,7 +64,7 @@ class BasePlugin:
         if "xfr_openaq2" not in Images:
             Domoticz.Image("xfr_openaq2.zip").Create()
         image = Images["xfr_openaq2"].ID
-        Domoticz.Debug("Image created. ID: "+str(image))
+        Domoticz.Debug("Image created. ID: {}".format(image))
         # Validation of parameters
         self.__radius = int(Parameters["Mode1"])
         if self.__radius < 0:
@@ -72,110 +76,211 @@ class BasePlugin:
         if lat is None or lon is None:
             Domoticz.Error("Unable to parse coordinates")
             return False
-        self.__url = "https://" + self.__API_ADDRESS + \
-            self.__API_URL.format(lat, lon, str(self.__radius))
-        Domoticz.Debug("url: " + self.__url)
+        self.__url = self.__API_URL.format(lat, lon, str(self.__radius))
+        Domoticz.Debug("url: {}".format(self.__url))
         # Create devices
+        # if len(Devices) == 0:
         for id in self.__VALUES:
-            self.__VALUES[id][0] = None
-            self.__VALUES[id][1] = None
-        if len(Devices) == 0:
-            for id in self.__VALUES:
-                Domoticz.Device(Unit=self.__VALUES[id][2], Name=self.__VALUES[id][3], TypeName="Custom", Options={
-                                "Custom": "0;ppm"}, Image=image, Used=1).Create()
-            Domoticz.Device(Unit=len(self.__VALUES) + 1, Name="Info",
-                            TypeName="Text", Image=image, Used=1).Create()
-
-        DumpConfigToLog()
-        # self.__conn = Domoticz.Connection(Name="OpenAQ", Transport="TCP/IP", Protocol="HTTPS", Address=self.__API_ADDRESS, Port="443")
-        # self.__conn.Connect()
+            if self.__VALUES[id][2] not in Devices:
+                self.__VALUES[id][0] = None
+                self.__VALUES[id][1] = None
+                Domoticz.Device(
+                    Unit=self.__VALUES[id][2],
+                    Name=self.__VALUES[id][3],
+                    TypeName="Custom",
+                    Options={"Custom": "0;ppm"},
+                    Image=image,
+                    Used=1,
+                ).Create()
+        #
+        if len(self.__VALUES) + 1 not in Devices:
+            Domoticz.Device(
+                Unit=len(self.__VALUES) + 1,
+                Name="Info",
+                TypeName="Text",
+                Used=1,
+            ).Create()
+        #
+        if len(self.__VALUES) + 2 not in Devices:
+            Domoticz.Device(
+                Unit=len(self.__VALUES) + 2,
+                Name="Index",
+                Type=243,
+                Subtype=22,
+                Options={},
+                Used=1,
+            ).Create()
+        #
+        config_2_log()
+        #
+        self.__conn = Domoticz.Connection(
+            Name=self.__API_CONN,
+            Transport="TCP/IP",
+            Protocol="HTTPS",
+            Address=self.__API_ENDPOINT,
+            Port="443",
+        )
+        self.__conn.Connect()
 
     def onStop(self):
-        Domoticz.Debug("onStop called")
+        Domoticz.Debug("onStop")
         for id in self.__VALUES:
             self.__VALUES[id][0] = None
             self.__VALUES[id][1] = None
 
     def onConnect(self, Connection, Status, Description):
-        Domoticz.Debug("onConnect called ("+str(Status)+"): "+Description)
+        Domoticz.Debug(
+            "onConnect: {}, {}, {}".format(Connection.Name, Status, Description)
+        )
+        if Connection.Name == self.__API_CONN:
+            if Status == 0:
+                sendData = {
+                    "Verb": "GET",
+                    "URL": self.__url,
+                    "Headers": {
+                        "Host": self.__API_ENDPOINT,
+                        "User-Agent": "Domoticz/1.0",
+                    },
+                }
+                Connection.Send(sendData)
 
     def onMessage(self, Connection, Data):
-        Domoticz.Debug("onMessage called")
+        Domoticz.Debug("onMessage: {}, {}".format(Connection.Name, Data))
+        status = int(Data["Status"])
+        if Connection.Name == self.__API_CONN:
+            if status == 200:
+                values = json.loads(Data["Data"].decode("utf-8", "ignore"))
+                # Get most recent value from each parameter. Data already ordered by distance, so check dates.
+                locations = values["results"]
+                totLocations = len(locations)
+                totMeasurements = 0
+                Domoticz.Debug("Locations found: {}".format(totLocations))
+                for location in locations:
+                    measurements = location["measurements"]
+                    numberOfMeasurements = len(measurements)
+                    totMeasurements += numberOfMeasurements
+                    Domoticz.Debug(
+                        "Location {} - measurements: {}".format(
+                            location["location"], numberOfMeasurements
+                        )
+                    )
+                    for measurement in measurements:
+                        Domoticz.Debug(
+                            "{} ... {}: {} {}".format(
+                                measurement["lastUpdated"],
+                                measurement["parameter"],
+                                measurement["value"],
+                                measurement["unit"],
+                            )
+                        )
+                        try:
+                            t = datetime.strptime(
+                                measurement["lastUpdated"], "%Y-%m-%dT%H:%M:%S.%fZ"
+                            )
+                        except TypeError:
+                            t = datetime.fromtimestamp(
+                                time.mktime(
+                                    time.strptime(
+                                        measurement["lastUpdated"],
+                                        "%Y-%m-%dT%H:%M:%S.%fZ",
+                                    )
+                                )
+                            )
+                        # Skip values like '-999'
+                        if measurement["value"] > 0.0:
+                            if self.__VALUES[measurement["parameter"]][1] is None:
+                                # First time value found. Always get this one.
+                                self.__VALUES[measurement["parameter"]][0] = t
+                                self.__VALUES[measurement["parameter"]][
+                                    1
+                                ] = measurement["value"]
+                                self.__VALUES[measurement["parameter"]][
+                                    4
+                                ] = measurement["unit"]
+                            else:
+                                # Is this value more actual?
+                                if t > self.__VALUES[measurement["parameter"]][0]:
+                                    # Domoticz.Debug("More recent date!!!")
+                                    self.__VALUES[measurement["parameter"]][0] = t
+                                    self.__VALUES[measurement["parameter"]][
+                                        1
+                                    ] = measurement["value"]
+                                    self.__VALUES[measurement["parameter"]][
+                                        4
+                                    ] = measurement["unit"]
+                # Domoticz.Debug("Results: {}".format(self.__VALUES))
+                # Update the devices
+                level = 0
+                txt = ""
+                for id in self.__VALUES:
+                    if self.__VALUES[id][1] is not None:
+                        update_device_options(
+                            self.__VALUES[id][2],
+                            {"Custom": "0;{}".format(self.__VALUES[id][4])},
+                        )
+                        update_device(
+                            self.__VALUES[id][2],
+                            int(self.__VALUES[id][1]),
+                            str(round(self.__VALUES[id][1], 1)),
+                        )
+                        # Check warning levels
+                        offset = 4
+                        for i in range(4, 0, -1):
+                            if (
+                                self.__VALUES[id][offset + i] is not None
+                                and self.__VALUES[id][1] > self.__VALUES[id][offset + i]
+                            ):
+                                Domoticz.Debug(
+                                    "{}: {} > {}?".format(
+                                        self.__VALUES[id][2],
+                                        self.__VALUES[id][1],
+                                        self.__VALUES[id][offset + i],
+                                    )
+                                )
+                                if i > level:
+                                    level = i
+                                    txt += self.__VALUES[id][3] + " "
+                            else:
+                                exit
+                Domoticz.Debug("Level: {}".format(level))
+                update_device(len(self.__VALUES) + 2, level, txt)
+                #
+                txt = "Number of stations: {}<br/>Measurements: {}".format(
+                    totLocations, totMeasurements
+                )
+                update_device(len(self.__VALUES) + 1, 0, txt)
+                Connection.Disconnect()
+            else:
+                Domoticz.Error(
+                    "{} returned a status: {}".format(Connection.Name, status)
+                )
 
     def onCommand(self, Unit, Command, Level, Hue):
-        Domoticz.Debug("onCommand called for Unit " + str(Unit) +
-                       ": Parameter '" + str(Command) + "', Level: " + str(Level))
+        Domoticz.Debug("onCommand: {}, {}, {}, {}".format(Unit, Command, Level, Hue))
 
     def onNotification(self, Name, Subject, Text, Status, Priority, Sound, ImageFile):
-        Domoticz.Debug("Notification: " + Name + "," + Subject + "," + Text +
-                       "," + Status + "," + str(Priority) + "," + Sound + "," + ImageFile)
+        Domoticz.Debug(
+            "onNotification: {}, {}, {}, {}, {}, {}, {}".format(
+                Name, Subject, Text, Status, Priority, Sound, ImageFile
+            )
+        )
 
     def onDisconnect(self, Connection):
-        Domoticz.Debug("onDisconnect called")
+        Domoticz.Debug("onDisconnect: {}".format(Connection.Name))
 
     def onHeartbeat(self):
-        Domoticz.Debug("onHeartbeat called")
+        Domoticz.Debug("onHeartbeat")
+        # Live
         self.__runAgain -= 1
         if self.__runAgain <= 0:
-            self.__runAgain = self.__HEARTBEATS2MIN * self.__MINUTES
-            # Init values
-            values = getData(self.__url)
-            # Get most recent value from each parameter. Data already ordered by distance, so check dates.
-            locations = values["results"]
-            totLocations = len(locations)
-            totMeasurements = 0
-            Domoticz.Debug("Locations found: " + str(totLocations))
-            for location in locations:
-                measurements = location["measurements"]
-                numberOfMeasurements = len(measurements)
-                totMeasurements += numberOfMeasurements
-                Domoticz.Debug(
-                    "Location " + location["location"] + " - measurements: " + str(numberOfMeasurements))
-                for measurement in measurements:
-                    Domoticz.Debug(measurement["lastUpdated"] + " ... " + measurement["parameter"] + ": " + str(
-                        measurement["value"]) + " " + measurement["unit"])
-                    try:
-                        t = datetime.strptime(measurement["lastUpdated"], "%Y-%m-%dT%H:%M:%S.%fZ")
-                    except TypeError:
-                        t = datetime.fromtimestamp(time.mktime(time.strptime(
-                            measurement["lastUpdated"], "%Y-%m-%dT%H:%M:%S.%fZ")))
-                    # Skip values like '-999'
-                    if measurement["value"] > 0.0:
-                        if self.__VALUES[measurement["parameter"]][1] is None:
-                            # First time value found. Always get this one.
-                            self.__VALUES[measurement["parameter"]][0] = t
-                            self.__VALUES[measurement["parameter"]
-                                          ][1] = measurement["value"]
-                            self.__VALUES[measurement["parameter"]
-                                          ][4] = measurement["unit"]
-                        else:
-                            # Domoticz.Debug( "parameter: " + measurement["parameter"] )
-                            # Domoticz.Debug( "t: " + str(t))
-                            # Domoticz.Debug( "self.__VALUES[measurement['parameter']][0]: " + str(self.__VALUES[measurement["parameter"]][0]))
-                            # Is this value more actual?
-                            if t > self.__VALUES[measurement["parameter"]][0]:
-                                # Domoticz.Debug("More recent date!!!")
-                                self.__VALUES[measurement["parameter"]][0] = t
-                                self.__VALUES[measurement["parameter"]
-                                              ][1] = measurement["value"]
-                                self.__VALUES[measurement["parameter"]
-                                              ][4] = measurement["unit"]
-            # Domoticz.Debug("Results: " + str(self.__VALUES))
-            # Update the devices
-            for id in self.__VALUES:
-                if self.__VALUES[id][1] is not None:
-                    UpdateDeviceOptions(self.__VALUES[id][2], {
-                                        "Custom": "0;" + self.__VALUES[id][4]})
-                    UpdateDevice(self.__VALUES[id][2], int(
-                        self.__VALUES[id][1]), str(round(self.__VALUES[id][1], 1)))
-            txt = "Number of stations: " + \
-                str(totLocations) + "<br/> " + \
-                "Measurements: " + str(totMeasurements)
-            # UpdateDeviceName(self.__UNIT_TEXT, plaats)
-            UpdateDevice(len(self.__VALUES) + 1, 0, txt, AlwaysUpdate=True)
-        else:
-            Domoticz.Debug("onHeartbeat called, run again in " +
-                           str(self.__runAgain) + " heartbeats.")
+            if self.__conn.Connecting() or self.__conn.Connected():
+                Domoticz.Debug("onHeartbeat ({}): is alive".format(self.__conn.Name))
+            else:
+                self.__conn.Connect()
+            self.__runAgain = self.__HEARTBEATS2MIN
+        Domoticz.Debug(
+            "onHeartbeat ({}): {} heartbeats".format(self.__conn.Name, self.__runAgain)
+        )
 
 
 global _plugin
@@ -209,8 +314,7 @@ def onCommand(Unit, Command, Level, Hue):
 
 def onNotification(Name, Subject, Text, Status, Priority, Sound, ImageFile):
     global _plugin
-    _plugin.onNotification(Name, Subject, Text, Status,
-                           Priority, Sound, ImageFile)
+    _plugin.onNotification(Name, Subject, Text, Status, Priority, Sound, ImageFile)
 
 
 def onDisconnect(Connection):
@@ -222,71 +326,70 @@ def onHeartbeat():
     global _plugin
     _plugin.onHeartbeat()
 
+
 ################################################################################
 # Generic helper functions
 ################################################################################
-
-
-def DumpConfigToLog():
+def config_2_log():
+    # Show parameters
+    Domoticz.Debug("Parameters count.....: {}".format(len(Parameters)))
     for x in Parameters:
-        if Parameters[x] != "":
-            Domoticz.Debug("'" + x + "':'" + str(Parameters[x]) + "'")
-    Domoticz.Debug("Device count: " + str(len(Devices)))
-    for x in Devices:
-        Domoticz.Debug("Device:           " + str(x) + " - " + str(Devices[x]))
-        Domoticz.Debug("Device ID:       '" + str(Devices[x].ID) + "'")
-        Domoticz.Debug("Device Name:     '" + Devices[x].Name + "'")
-        Domoticz.Debug("Device nValue:    " + str(Devices[x].nValue))
-        Domoticz.Debug("Device sValue:   '" + Devices[x].sValue + "'")
-        Domoticz.Debug("Device LastLevel: " + str(Devices[x].LastLevel))
+        Domoticz.Debug("Parameter '{}'...: '{}'".format(x, Parameters[x]))
+    # Show settings
+    Domoticz.Debug("Settings count...: {}".format(len(Settings)))
     for x in Settings:
-        Domoticz.Debug("Setting:           " +
-                       str(x) + " - " + str(Settings[x]))
+        Domoticz.Debug("Setting '{}'...: '{}'".format(x, Settings[x]))
+    # Show images
+    Domoticz.Debug("Image count..........: {}".format(len(Images)))
+    for x in Images:
+        Domoticz.Debug("Image '{}'...': '{}'".format(x, Images[x]))
+    # Show devices
+    Domoticz.Debug("Device count.........: {}".format(len(Devices)))
+    for x in Devices:
+        Domoticz.Debug("Device...............: {} - {}".format(x, Devices[x]))
+        Domoticz.Debug("Device Idx...........: {}".format(Devices[x].ID))
+        Domoticz.Debug(
+            "Device Type..........: {} / {}".format(Devices[x].Type, Devices[x].SubType)
+        )
+        Domoticz.Debug("Device Name..........: '{}'".format(Devices[x].Name))
+        Domoticz.Debug("Device nValue........: {}".format(Devices[x].nValue))
+        Domoticz.Debug("Device sValue........: '{}'".format(Devices[x].sValue))
+        Domoticz.Debug("Device Options.......: '{}'".format(Devices[x].Options))
+        Domoticz.Debug("Device Used..........: {}".format(Devices[x].Used))
+        Domoticz.Debug("Device ID............: '{}'".format(Devices[x].DeviceID))
+        Domoticz.Debug("Device LastLevel.....: {}".format(Devices[x].LastLevel))
+        Domoticz.Debug("Device Image.........: {}".format(Devices[x].Image))
 
 
-def UpdateDevice(Unit, nValue, sValue, TimedOut=0, AlwaysUpdate=False):
-    # Make sure that the Domoticz device still exists (they can be deleted) before updating it
+def update_device(Unit, nValue, sValue, TimedOut=0, AlwaysUpdate=False):
     if Unit in Devices:
-        if Devices[Unit].nValue != nValue or Devices[Unit].sValue != sValue or Devices[Unit].TimedOut != TimedOut or AlwaysUpdate:
-            Devices[Unit].Update(
-                nValue=nValue, sValue=str(sValue), TimedOut=TimedOut)
-            Domoticz.Debug("Update " + Devices[Unit].Name + ": " + str(
-                nValue) + " - '" + str(sValue) + "' - " + str(TimedOut))
+        if (
+            Devices[Unit].nValue != nValue
+            or Devices[Unit].sValue != sValue
+            or Devices[Unit].TimedOut != TimedOut
+            or AlwaysUpdate
+        ):
+            Devices[Unit].Update(nValue=nValue, sValue=str(sValue), TimedOut=TimedOut)
+            Domoticz.Debug(
+                "Update {}: {} - '{}'".format(Devices[Unit].Name, nValue, sValue)
+            )
 
 
-def DumpHTTPResponseToLog(httpDict):
-    if isinstance(httpDict, dict):
-        Domoticz.Debug("HTTP Details ("+str(len(httpDict))+"):")
-        for x in httpDict:
-            if isinstance(httpDict[x], dict):
-                Domoticz.Debug("--->'"+x+" ("+str(len(httpDict[x]))+"):")
-                for y in httpDict[x]:
-                    Domoticz.Debug("------->'" + y + "':'" +
-                                   str(httpDict[x][y]) + "'")
+def response_2_log(response):
+    if isinstance(response, dict):
+        Domoticz.Debug("Response: ({})".format(len(response)))
+        for x in response:
+            if isinstance(response[x], dict):
+                Domoticz.Debug(".... {} ({})".format(x, len(response[x])))
+                for y in response[x]:
+                    Domoticz.Debug("........ '{}': '{}'".format(y, response[x][y]))
             else:
-                Domoticz.Debug("--->'" + x + "':'" + str(httpDict[x]) + "'")
+                Domoticz.Debug(".... '{}': '{}'".format(x, response[x]))
 
 
-def UpdateDeviceOptions(Unit, Options={}):
+def update_device_options(Unit, Options={}):
     if Unit in Devices:
-        Devices[Unit].Update(nValue=Devices[Unit].nValue,
-                             sValue=Devices[Unit].sValue, Options=Options)
-        Domoticz.Debug("Update options " +
-                       Devices[Unit].Name + ": " + str(Options))
-
-
-import json
-import subprocess
-
-
-def getData(url):
-    command = "curl"
-    options = "'" + url + "'"
-    p = subprocess.Popen(command + " " + options,
-                         shell=True, stdout=subprocess.PIPE)
-    p.wait()
-    data, errors = p.communicate()
-    if p.returncode != 0:
-        Domoticz.Debug("Request failed")
-    values = json.loads(data.decode("utf-8", "ignore"))
-    return values
+        Devices[Unit].Update(
+            nValue=Devices[Unit].nValue, sValue=Devices[Unit].sValue, Options=Options
+        )
+        Domoticz.Debug("Update options {}: {}".format(Devices[Unit].Name, Options))
