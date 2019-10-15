@@ -36,6 +36,7 @@ class BasePlugin:
     __API_ENDPOINT = "api.openaq.org"
     __API_URL = "/v1/latest?coordinates={},{}&radius={}&order_by=distance"
 
+    __LEVELS = {0: "Very low", 1: "Low", 2: "Medium", 3: "High", 4: "Very high"}
     __VALUES = {
         # id: [date, value, unit, name, units, low, medium, high, very high]
         "bc": [None, None, 1, "BC", None, None, None, None, None],
@@ -95,10 +96,7 @@ class BasePlugin:
         #
         if len(self.__VALUES) + 1 not in Devices:
             Domoticz.Device(
-                Unit=len(self.__VALUES) + 1,
-                Name="Info",
-                TypeName="Text",
-                Used=1,
+                Unit=len(self.__VALUES) + 1, Name="Info", TypeName="Text", Used=1
             ).Create()
         #
         if len(self.__VALUES) + 2 not in Devices:
@@ -112,7 +110,7 @@ class BasePlugin:
             ).Create()
         #
         config_2_log()
-        #
+        # Setup connection
         self.__conn = Domoticz.Connection(
             Name=self.__API_CONN,
             Transport="TCP/IP",
@@ -223,11 +221,12 @@ class BasePlugin:
                             int(self.__VALUES[id][1]),
                             str(round(self.__VALUES[id][1], 1)),
                         )
-                        # Check warning levels
+                        # Check warning levels of this sensor
                         offset = 4
                         for i in range(4, 0, -1):
-                            if (
+                            if (  # Warning level available for this sensor
                                 self.__VALUES[id][offset + i] is not None
+                                # Value higher then upper level
                                 and self.__VALUES[id][1] > self.__VALUES[id][offset + i]
                             ):
                                 Domoticz.Debug(
@@ -237,19 +236,27 @@ class BasePlugin:
                                         self.__VALUES[id][offset + i],
                                     )
                                 )
+                                # level higher then previous value?
                                 if i > level:
                                     level = i
+                                    # Add pollutant to the warning text
                                     txt += self.__VALUES[id][3] + " "
                             else:
                                 exit
+                #
                 Domoticz.Debug("Level: {}".format(level))
-                update_device(len(self.__VALUES) + 2, level, txt)
+                if level == 0:
+                    update_device(len(self.__VALUES) + 2, level, "No alert")
+                else:
+                    update_device(
+                        len(self.__VALUES) + 2, level, "{}: {}".format(level, txt)
+                    )
                 #
                 txt = "Number of stations: {}<br/>Measurements: {}".format(
                     totLocations, totMeasurements
                 )
                 update_device(len(self.__VALUES) + 1, 0, txt)
-                Connection.Disconnect()
+                # Connection.Disconnect()
             else:
                 Domoticz.Error(
                     "{} returned a status: {}".format(Connection.Name, status)
@@ -275,6 +282,15 @@ class BasePlugin:
         if self.__runAgain <= 0:
             if self.__conn.Connecting() or self.__conn.Connected():
                 Domoticz.Debug("onHeartbeat ({}): is alive".format(self.__conn.Name))
+                sendData = {
+                    "Verb": "GET",
+                    "URL": self.__url,
+                    "Headers": {
+                        "Host": self.__API_ENDPOINT,
+                        "User-Agent": "Domoticz/1.0",
+                    },
+                }
+                self.__conn.Send(sendData)
             else:
                 self.__conn.Connect()
             self.__runAgain = self.__HEARTBEATS2MIN
