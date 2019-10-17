@@ -89,23 +89,36 @@ class BasePlugin:
                     Unit=self.__VALUES[id][2],
                     Name=self.__VALUES[id][3],
                     TypeName="Custom",
-                    Options={"Custom": "0;ppm"},
+                    Options={"Custom": "0;µg/m³"},
                     Image=image,
                     Used=1,
                 ).Create()
         #
-        if len(self.__VALUES) + 1 not in Devices:
-            Domoticz.Device(
-                Unit=len(self.__VALUES) + 1, Name="Info", TypeName="Text", Used=1
-            ).Create()
+        unit = len(self.__VALUES)
         #
-        if len(self.__VALUES) + 2 not in Devices:
+        unit += 1
+        if unit not in Devices:
+            Domoticz.Device(Unit=unit, Name="Info", TypeName="Text", Used=1).Create()
+        #
+        unit += 1
+        if unit not in Devices:
             Domoticz.Device(
-                Unit=len(self.__VALUES) + 2,
-                Name="Index",
+                Unit=unit,
+                Name="Pollutants",
                 Type=243,
                 Subtype=22,
                 Options={},
+                Used=1,
+            ).Create()
+        #
+        unit += 1
+        if unit not in Devices:
+            Domoticz.Device(
+                Unit=unit,
+                Name="Air Quality Index",
+                TypeName="Custom",
+                Options={"Custom": "0;"},
+                Image=image,
                 Used=1,
             ).Create()
         #
@@ -243,20 +256,23 @@ class BasePlugin:
                                     txt += self.__VALUES[id][3] + " "
                             else:
                                 exit
-                #
-                Domoticz.Debug("Level: {}".format(level))
-                if level == 0:
-                    update_device(len(self.__VALUES) + 2, level, "No alert")
-                else:
-                    update_device(
-                        len(self.__VALUES) + 2, level, "{}: {}".format(level, txt)
-                    )
-                #
-                txt = "Number of stations: {}<br/>Measurements: {}".format(
+                # Info
+                unit = len(self.__VALUES)
+                unit += 1
+                stat = "Number of stations: {}<br/>Measurements: {}".format(
                     totLocations, totMeasurements
                 )
-                update_device(len(self.__VALUES) + 1, 0, txt)
-                # Connection.Disconnect()
+                update_device(unit, 0, stat)
+                # Alert
+                Domoticz.Debug("Level: {}".format(level))
+                unit += 1
+                if level == 0:
+                    update_device(unit, level, "No alert")
+                else:
+                    update_device(unit, level, "{}".format(txt))
+                # Index
+                unit += 1
+                update_device(unit, level, "{}".format(level))
             else:
                 Domoticz.Error(
                     "{} returned a status: {}".format(Connection.Name, status)
