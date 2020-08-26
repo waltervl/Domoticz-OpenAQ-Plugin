@@ -9,7 +9,7 @@
 #   http://www.airqualitynow.eu/about_indices_definition.php
 
 """
-<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="2.0.0" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
+<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="2.0.1" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
     <params>
         <param field="Mode1" label="Radius (km)" width="75px" default="10" required="true"/>
         <param field="Mode6" label="Debug" width="75px">
@@ -309,7 +309,7 @@ class BasePlugin:
                 self.__conn.Send(sendData)
             else:
                 self.__conn.Connect()
-            self.__runAgain = self.__HEARTBEATS2MIN
+            self.__runAgain = self.__HEARTBEATS2MIN * self.__MINUTES
         Domoticz.Debug(
             "onHeartbeat ({}): {} heartbeats".format(self.__conn.Name, self.__runAgain)
         )
