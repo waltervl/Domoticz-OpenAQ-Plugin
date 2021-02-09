@@ -30,11 +30,11 @@ import time
 class BasePlugin:
 
     __HEARTBEATS2MIN = 6
-    __MINUTES = 60  # 1 hour or use a parameter
+    __MINUTES = 1  # 1 hour or use a parameter
 
     __API_CONN = "openaq"
     __API_ENDPOINT = "api.openaq.org"
-    __API_URL = "/v1/latest?coordinates={},{}&radius={}&order_by=distance"
+    __API_URL = "/v2/latest?coordinates={},{}&radius={}&order_by=location"
 
     __LEVELS = {0: "Very low", 1: "Low", 2: "Medium", 3: "High", 4: "Very high"}
     __VALUES = {
@@ -184,41 +184,40 @@ class BasePlugin:
                                 measurement["unit"],
                             )
                         )
+                        lastUpdated = measurement["lastUpdated"][0:19]
+                        parameter = measurement["parameter"]
+                        value = float(measurement["value"])
+                        unit = measurement["unit"]
+                        Domoticz.Debug("lastUpdated: {}".format(lastUpdated))
+                        Domoticz.Debug("parameter: {}".format(parameter))
+                        Domoticz.Debug("value: {}".format(value))
+                        Domoticz.Debug("unit: {}".format(unit))
+                        # Fix for Python bug
                         try:
-                            t = datetime.strptime(
-                                measurement["lastUpdated"], "%Y-%m-%dT%H:%M:%S.%fZ"
-                            )
+                            t = datetime.strptime(lastUpdated, "%Y-%m-%dT%H:%M:%S")
                         except TypeError:
                             t = datetime.fromtimestamp(
                                 time.mktime(
                                     time.strptime(
-                                        measurement["lastUpdated"],
-                                        "%Y-%m-%dT%H:%M:%S.%fZ",
+                                        lastUpdated,
+                                        "%Y-%m-%dT%H:%M:%S",
                                     )
                                 )
                             )
                         # Skip values like '-999'
-                        if measurement["value"] > 0.0:
-                            if self.__VALUES[measurement["parameter"]][1] is None:
+                        if value > 0.0 and parameter in self.__VALUES:
+                            if self.__VALUES[parameter][1] is None:
                                 # First time value found. Always get this one.
-                                self.__VALUES[measurement["parameter"]][0] = t
-                                self.__VALUES[measurement["parameter"]][
-                                    1
-                                ] = measurement["value"]
-                                self.__VALUES[measurement["parameter"]][
-                                    4
-                                ] = measurement["unit"]
+                                self.__VALUES[parameter][0] = t
+                                self.__VALUES[parameter][1] = value
+                                self.__VALUES[parameter][4] = unit
                             else:
                                 # Is this value more actual?
-                                if t > self.__VALUES[measurement["parameter"]][0]:
+                                if t > self.__VALUES[parameter][0]:
                                     # Domoticz.Debug("More recent date!!!")
-                                    self.__VALUES[measurement["parameter"]][0] = t
-                                    self.__VALUES[measurement["parameter"]][
-                                        1
-                                    ] = measurement["value"]
-                                    self.__VALUES[measurement["parameter"]][
-                                        4
-                                    ] = measurement["unit"]
+                                    self.__VALUES[parameter][0] = t
+                                    self.__VALUES[parameter][1] = value
+                                    self.__VALUES[parameter][4] = unit
                 # Domoticz.Debug("Results: {}".format(self.__VALUES))
                 # Update the devices
                 level = 0
@@ -293,6 +292,7 @@ class BasePlugin:
 
     def onHeartbeat(self):
         Domoticz.Debug("onHeartbeat")
+        Domoticz.Debug("url: {}".format(self.__url))
         # Live
         self.__runAgain -= 1
         if self.__runAgain <= 0:
