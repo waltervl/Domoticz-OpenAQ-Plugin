@@ -30,7 +30,7 @@ import time
 class BasePlugin:
 
     __HEARTBEATS2MIN = 6
-    __MINUTES = 1  # 1 hour or use a parameter
+    __MINUTES = 60  # 1 hour or use a parameter
 
     __API_CONN = "openaq"
     __API_ENDPOINT = "api.openaq.org"
