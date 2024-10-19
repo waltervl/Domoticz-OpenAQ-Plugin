@@ -4,14 +4,16 @@
 #  OpenAQ Python Plugin
 #
 # Author: Xorfor
+# Maintainer: Waltervl
 #
 # Air Quality Index based on:
 #   http://www.airqualitynow.eu/about_indices_definition.php
 
 """
-<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor" version="3.0" wikilink="https://github.com/Xorfor/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
+<plugin key="xfr_openaq" name="OpenAQ" author="Xorfor, Waltervl" version="3.1" wikilink="https://github.com/waltervl/Domoticz-OpenAQ-Plugin" externallink="https://openaq.org/">
     <params>
         <param field="Mode1" label="Radius (km)" width="75px" default="10" required="true"/>
+        <param field="Mode2" label="OpenAQ API-KEY" width="175px" default="" required="true"/>
         <param field="Mode6" label="Debug" width="75px">
             <options>
                 <option label="True" value="Debug"/>
@@ -79,6 +81,12 @@ class BasePlugin:
             return False
         self.__url = self.__API_URL.format(lat, lon, str(self.__radius))
         Domoticz.Debug("url: {}".format(self.__url))
+        # get API KEY
+        self.__API_KEY = Parameters["Mode2"]
+        if self.__API_KEY is "":
+            Domoticz.Error("Unable to read openaq API-KEY from settings")
+            return False
+        
         # Create devices
         # if len(Devices) == 0:
         for id in self.__VALUES:
@@ -151,6 +159,7 @@ class BasePlugin:
                     "Headers": {
                         "Host": self.__API_ENDPOINT,
                         "User-Agent": "Domoticz/1.0",
+                        "X-API-Key": self.__API_KEY,
                     },
                 }
                 Connection.Send(sendData)
@@ -304,6 +313,7 @@ class BasePlugin:
                     "Headers": {
                         "Host": self.__API_ENDPOINT,
                         "User-Agent": "Domoticz/1.0",
+                        "X-API-Key": self.__API_KEY,
                     },
                 }
                 self.__conn.Send(sendData)
