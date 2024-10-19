@@ -1,21 +1,16 @@
-# NOT MAINTAINED ANYMORE!!!
-I am disappointed in the way Domoticz developes: 
-* 1 stable version per year, I had to wait 4 months until a bug was fixed
-* no reaction on reported bugs, also if you give a direction for solution
-* lost data after upgrade to a new stable versions
-* etc.
-
-So I moved to Home Assistant, and have no time/environment to maintain this plugin
-
 # OpenAQ
 This Domoticz plugin gets the air quality at your location from https://openaq.org. This plugin is also one of the software projects as shown on https://openaq.org/#/community/projects?type=Software.
 OpenAQ is collecting data in 64 different countries and always seeking to add more. They aggregate PM<sub>2.5</sub>, PM<sub>10</sub>, ozone (O<sub>3</sub>), sulfur dioxide (SO<sub>2</sub>), nitrogen dioxide (NO<sub>2</sub>), carbon monoxide (CO), and black carbon (BC) from real-time government and research grade sources.
 The plugin scans the stations nearby your location and takes the data about all the pollutants which are closest to your location.
 
+With special recognition to user Xorfor for creating this plugin.
+from v3.1: An OpenAQ API KEY is needed that you can obtain from https://explore.openaq.org/account
+
 ## Parameters
 | Name       | Description                                                              |
 | :---       | :---                                                                     |
 | **Radius** | Radius in kilometers from your location defined in Settings. Default: 10 |
+| **OpenAQ API KEY** | Obtain from https://explore.openaq.org/account Default: empty|
 
 Check https://openaq.org/#/map to see if a source can be found at your location.
 
